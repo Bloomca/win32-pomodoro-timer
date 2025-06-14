@@ -1,13 +1,18 @@
 #include <windows.h>
 #include <dwmapi.h>
 
-#define BTN_TIMER_START 1001
-#define BTN_TIMER_STOP 1002
+#define ID_BTN_START 1001
+#define TIMER_ID 1
+
+static UINT_PTR timerID = 0;
+static int remainingSeconds = 25 * 60;
 
 LRESULT CALLBACK WndProc(HWND, UINT, WPARAM, LPARAM);
 
 BOOL IsSystemDarkMode();
 
+HWND timerHandle;
+HWND buttonHandle;
 BOOL isDarkMode;
 
 int WINAPI wWinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, PWSTR lpCmdLine, int nCmdShow) {
@@ -44,10 +49,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             int backdropType = 2; // DWMSBT_MAINWINDOW (Mica)
             DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdropType, sizeof(backdropType));
 
-            MARGINS margins = {-1, -1, -1, -1};
-            DwmExtendFrameIntoClientArea(hwnd, &margins);
-
-            HWND hStatic = CreateWindowW(L"Static", L"25:00", WS_CHILD | WS_VISIBLE | SS_LEFT,
+            timerHandle = CreateWindowW(L"Static", L"25:00", WS_CHILD | WS_VISIBLE | SS_LEFT,
                 20, 20, 150, 60, 
                 hwnd, (HMENU) 1, NULL, NULL);
 
@@ -64,24 +66,54 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
                 L"Segoe UI"
             );
 
-            SendMessage(hStatic, WM_SETFONT, (WPARAM)hFont, TRUE);
+            SendMessage(timerHandle, WM_SETFONT, (WPARAM)hFont, TRUE);
+
+            buttonHandle = CreateWindowW(L"Button", L"Start",
+                WS_VISIBLE | WS_CHILD ,
+                20, 80, 150, 25, hwnd, (HMENU) ID_BTN_START, NULL, NULL);
 
             break;
-        case WM_PAINT:
-        {
-            PAINTSTRUCT ps;
-            HDC hdc = BeginPaint(hwnd, &ps);
-            
-            // Fill with black (will be transparent due to DWM)
-            RECT rc;
-            GetClientRect(hwnd, &rc);
-            FillRect(hdc, &rc, (HBRUSH)GetStockObject(BLACK_BRUSH));
-            
-            SetBkMode(hdc, TRANSPARENT);
-            
-            EndPaint(hwnd, &ps);
-            return 0;
-        }
+
+        case WM_COMMAND:
+            if (LOWORD(wParam) == ID_BTN_START) {
+                wchar_t buttonText[256];
+                GetWindowTextW(buttonHandle, buttonText, 256);
+
+                if (wcscmp(buttonText, L"Start") == 0) {
+                    SetWindowTextW(buttonHandle, L"Stop");
+                    timerID = SetTimer(hwnd, TIMER_ID, 1000, NULL);
+                } else {
+                    SetWindowTextW(buttonHandle, L"Start");
+                    if (timerID != 0) {
+                        KillTimer(hwnd, TIMER_ID);
+                        timerID = 0;
+                    }
+                }
+            }
+            break;
+
+        case WM_TIMER:
+            if (wParam == TIMER_ID) {
+                remainingSeconds--;
+                
+                int minutes = remainingSeconds / 60;
+                int seconds = remainingSeconds % 60;
+                
+                wchar_t timeString[32];
+                wsprintfW(timeString, L"%02d:%02d", minutes, seconds);
+
+                SetWindowTextW(timerHandle, timeString);
+                
+                if (remainingSeconds <= 0) {
+                    KillTimer(hwnd, TIMER_ID);
+                    timerID = 0;
+                    SetWindowTextW(buttonHandle, L"Start");
+                    
+                    MessageBeep(MB_ICONINFORMATION);
+                    SetWindowTextW(timerHandle, L"00:00");
+                }
+            }
+            break;
 
         case WM_CTLCOLORSTATIC:
         {
@@ -91,14 +123,18 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
             // 1 is static controls
             if (GetDlgCtrlID(hwndStatic) == 1)
             {
-                SetTextColor(hdcStatic, RGB(220, 220, 220));
+                SetTextColor(hdcStatic, RGB(50, 50, 50));
                 SetBkMode(hdcStatic, TRANSPARENT);
-                return (LRESULT)GetStockObject(NULL_BRUSH);
+                HBRUSH hBrush = CreateSolidBrush(GetSysColor(COLOR_WINDOW));
+                return (LRESULT)hBrush;
             }
             break;
         }
 
         case WM_DESTROY:
+            if (timerID != 0) {
+                KillTimer(hwnd, TIMER_ID);
+            }
             PostQuitMessage(0);
             break;
     }

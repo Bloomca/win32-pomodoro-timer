@@ -23,6 +23,7 @@
     <Library Include="user32.lib" />
     <Library Include="kernel32.lib" />
     <Library Include="dwmapi.lib" />
+    <Library Include="advapi32.lib" />  <!-- For registry -->
   </ItemGroup>
 
   <!-- Import build rules -->
